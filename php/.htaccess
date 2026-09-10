@@ -1,0 +1,12 @@
+# Basic Apache hardening for shared hosting (cPanel).
+Options -Indexes
+
+<IfModule mod_php.c>
+    php_flag display_errors off
+</IfModule>
+
+# Never serve PHP source if misconfigured, and block direct access to
+# config/includes even though they contain no routes of their own.
+<FilesMatch "\.(sql)$">
+    Require all denied
+</FilesMatch>

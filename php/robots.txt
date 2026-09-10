@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /network/
+Disallow: /notifications/
+Disallow: /config/
+Disallow: /includes/
+Disallow: /create-admin.php
+
+# Replace with your real domain (the sitemap directive requires an absolute URL):
+Sitemap: https://www.example.com/sitemap.php

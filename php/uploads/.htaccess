@@ -1,0 +1,8 @@
+# Uploaded files must never be executable — this is the critical control
+# that stops a disguised .php file from running if it ever ends up here.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<FilesMatch "\.(php|phtml|php\d)$">
+    Require all denied
+</FilesMatch>
