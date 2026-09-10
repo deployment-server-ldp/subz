@@ -198,6 +198,90 @@ function query_string_with(array $overrides): string
     return http_build_query($params);
 }
 
+/**
+ * Shared query builder for the member/professional directories. Only ever
+ * returns VERIFIED profiles (unverified members are excluded from search
+ * until verified), and only PUBLIC profiles unless the viewer is signed in
+ * (who may also see COMMUNITY-visibility profiles).
+ */
+function search_profiles(array $filters, bool $viewerSignedIn, bool $requireProfessional = false): array
+{
+    $where = ["p.verification_status = 'verified'"];
+    $params = [];
+
+    $where[] = $viewerSignedIn ? "p.visibility IN ('public','community')" : "p.visibility = 'public'";
+
+    if (!empty($filters['q'])) {
+        $where[] = '(p.first_name LIKE ? OR p.last_name LIKE ? OR p.profession LIKE ? OR p.company LIKE ?)';
+        $like = '%' . $filters['q'] . '%';
+        array_push($params, $like, $like, $like, $like);
+    }
+    if (!empty($filters['country_id'])) {
+        $where[] = 'p.country_id = ?';
+        $params[] = $filters['country_id'];
+    }
+    if (!empty($filters['city_id'])) {
+        $where[] = 'p.city_id = ?';
+        $params[] = $filters['city_id'];
+    }
+    if (!empty($filters['industry'])) {
+        $where[] = 'p.industry LIKE ?';
+        $params[] = '%' . $filters['industry'] . '%';
+    }
+    if (!empty($filters['open_to_networking'])) {
+        $where[] = 'p.open_to_networking = 1';
+    }
+    if (!empty($filters['open_to_mentorship'])) {
+        $where[] = 'p.open_to_mentorship = 1';
+    }
+    if ($requireProfessional) {
+        $where[] = 'EXISTS (SELECT 1 FROM profile_professional_categories ppc WHERE ppc.profile_id = p.id)';
+    }
+    if (!empty($filters['category_id'])) {
+        $where[] = 'EXISTS (SELECT 1 FROM profile_professional_categories ppc WHERE ppc.profile_id = p.id AND ppc.category_id = ?)';
+        $params[] = $filters['category_id'];
+    }
+
+    $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+    $countStmt = db()->prepare("SELECT COUNT(*) FROM profiles p $whereSql");
+    $countStmt->execute($params);
+    $total = (int) $countStmt->fetchColumn();
+
+    $pagination = paginate((int) ($filters['page'] ?? 1), $total, 12);
+
+    $sql = "SELECT p.*, c.name AS country_name, ci.name AS city_name FROM profiles p
+        LEFT JOIN countries c ON c.id = p.country_id LEFT JOIN cities ci ON ci.id = p.city_id
+        $whereSql ORDER BY p.updated_at DESC LIMIT {$pagination['perPage']} OFFSET {$pagination['offset']}";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    return ['results' => $stmt->fetchAll(), 'pagination' => $pagination];
+}
+
+/** Resolves a single profile by slug for public viewing, applying the same visibility rule so a direct link can't bypass privacy settings. */
+function get_visible_profile_by_slug(string $slug, bool $viewerSignedIn, ?int $viewerProfileId = null): ?array
+{
+    $stmt = db()->prepare('SELECT p.*, c.name AS country_name, ci.name AS city_name FROM profiles p
+        LEFT JOIN countries c ON c.id = p.country_id LEFT JOIN cities ci ON ci.id = p.city_id
+        WHERE p.slug = ? LIMIT 1');
+    $stmt->execute([$slug]);
+    $profile = $stmt->fetch();
+    if (!$profile) {
+        return null;
+    }
+    if ($viewerProfileId !== null && $viewerProfileId === (int) $profile['id']) {
+        return $profile;
+    }
+    if ($profile['visibility'] === 'private') {
+        return null;
+    }
+    if ($profile['visibility'] === 'community' && !$viewerSignedIn) {
+        return null;
+    }
+    return $profile;
+}
+
 /** Reads a published CMS page by slug, or null if not created yet (caller supplies a fallback). */
 function get_cms_page(string $slug): ?array
 {
