@@ -5,6 +5,7 @@
   "description": "SUBZWARI GLOBAL NETWORK — SUBZWARI's ARE ONE. A global community and family network platform.",
   "scripts": {
     "dev": "next dev",
+    "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
