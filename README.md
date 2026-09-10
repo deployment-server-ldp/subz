@@ -9,12 +9,18 @@ networking, and supporting community events and stories. This is **not** an NGO,
 charity, fundraising platform, or commercial marketplace: there is no payments,
 donations, or e-commerce functionality anywhere in this codebase.
 
-## ⚠️ Current Status: Architecture Phase (pre-implementation)
+## Status: MVP implemented, unverified by a real build
 
-Per the project brief, this repository currently contains the **architecture,
-database schema, and project scaffold** — the deliverable required for review before
-major feature implementation begins. It is not yet a working product. See
-"What's implemented so far" below for exactly what runs today.
+Every module in the MVP scope (see `ARCHITECTURE.md` §M) is implemented with real
+Prisma-backed server actions, RBAC-checked admin actions, and pages wired to the
+database — not placeholders. **One important caveat**: this was built in a sandbox
+with no npm registry access, so `npm install`, `prisma generate`, `tsc`, and `next
+build` have not been run against this code. Every file was written and manually
+reviewed for correctness, and several real bugs (invalid Prisma relations, an
+inaccessible upload button, a stray type-widening issue) were found and fixed this
+way — but a first real `npm install && npx prisma validate && npm run typecheck &&
+npm run build` in an environment with registry access should be treated as an
+required verification step, not a formality, before this is considered production-fit.
 
 Read, in order:
 
@@ -25,23 +31,59 @@ Read, in order:
 3. [`SECURITY.md`](./SECURITY.md) — security architecture and controls.
 4. [`prisma/schema.prisma`](./prisma/schema.prisma) — the actual database schema.
 
-## What's implemented so far
+## What's implemented
 
-- Full Prisma schema (`prisma/schema.prisma`) covering identity/RBAC, profiles, family
-  branches/relationships, geography, professional & business directories, events,
-  stories, moments, support requests, connections, verification, moderation/reports,
-  audit logs, notifications, and CMS/settings tables.
-- Next.js 14 (App Router) + TypeScript + Tailwind project scaffold with route groups
-  for public / auth / member / admin surfaces.
-- Design tokens (colors, fonts) matching the brand direction in `ARCHITECTURE.md` §L.
-- A placeholder homepage rendering the hero (brand name, slogan, primary/secondary
-  CTAs) — **not yet wired to any backend data**. Every other route in the sitemap is
-  documented but not yet built.
-- `.env.example` describing every required environment variable.
+- **Identity & auth**: registration, email OTP verification, password + email-code
+  login, forgot/reset password, optional Google sign-in, RBAC permission checks
+  (DB-driven, with a sane default per system role), audit logging, rate limiting.
+- **Member profile**: personal/professional/family info, privacy visibility controls,
+  profile-photo upload (real signed S3/R2 upload flow), profile-completion tracking.
+- **Verification workflow**: member submission (snapshotted at submission time), admin
+  queue, approve/reject/request-more-info with history and notifications, suspend/
+  restore independent of any open request.
+- **Directory**: member and professional search/filter/pagination, enforcing
+  visibility + verified-only rules server-side; individual profile pages.
+- **Geography**: admin-managed countries/cities; public country/city community pages;
+  a fully data-driven homepage (stats, "Around the World", featured members,
+  professional categories, stories, moments — nothing hardcoded).
+- **Businesses**: submission, admin moderation queue, public directory.
+- **Family**: admin-managed family branches with member association requests;
+  consent-based family relationships (edges requiring the other member's confirmation).
+- **Events**: propose → admin approve/publish, public listing, RSVP with capacity.
+- **Stories**: member submission plus a full admin CMS (draft/publish/schedule/
+  feature/categories/tags), public list/detail with SEO-friendly metadata.
+- **Moments**: submission with a real photo upload, admin moderate/feature, public
+  gallery.
+- **Community support**: submit/moderate/browse-and-offer-help — no payments anywhere.
+- **Connections & notifications**: request/accept/reject/remove, contact requests,
+  a notification center with unread counts.
+- **Reports & moderation**: a reusable report action wired into profile/business/
+  event/story pages, an admin triage queue, and an audit-log viewer.
+- **Admin**: dashboard with live KPIs, member management (search/filter/suspend/
+  restore), staff account management, a roles & permissions screen (baseline matrix
+  plus custom role creation), a settings module (homepage hero text + generic
+  per-category key/value settings — no code change needed to update site copy), and
+  a CMS for generic content pages/navigation/footer.
+- **SEO**: per-page metadata, `sitemap.xml`, `robots.txt` (admin/dashboard/api
+  disallowed), private/unverified profiles excluded from indexing via `isIndexable`.
+- **Seed data**: `prisma/seed.ts` seeds permissions, an optional Super Admin bootstrap,
+  countries/cities, professional/business/story categories, demo members, and one
+  demo business/story/event/family branch — all clearly synthetic.
 
-**Nothing here fakes functionality.** Where a feature isn't built yet, there is no
-page, no button, and no seed data pretending otherwise — it's simply not present, and
-`ARCHITECTURE.md` §M lists the phase in which it will be.
+**Not built** (explicitly out of MVP scope per the brief): payments/donations/
+fundraising of any kind, real-time chat, video calling, a mobile app, advanced
+genealogy visualization beyond the relationship-edge model, and multilingual support.
+The schema and module boundaries are shaped so these can be added later without a
+rewrite (see `ARCHITECTURE.md` and `DATABASE.md` "Future-Ready Notes").
+
+**Known simplifications** (documented in code comments where they occur): city
+detail pages resolve by slug via first-match rather than a globally unique slug
+(cities are only unique per-country); the in-memory rate limiter is single-instance
+only (swap for Upstash Redis before running more than one server instance); business
+logos and event/story cover images aren't wired to the upload flow yet (profile
+photos and moment photos are); the "Verified only" directory filter from the brief is
+enforced unconditionally rather than as a toggle, per ARCHITECTURE.md §I's rule that
+unverified members are excluded from search by default.
 
 ## Tech Stack
 
@@ -80,15 +122,16 @@ npm run prisma:migrate
 npm run db:seed
 ```
 
-Seed data is clearly demo/sample data (see `ARCHITECTURE.md` §"Seed Data") and must
-never be run against a production database. As of this commit the seed script is a
-placeholder — see `prisma/seed.ts` for what's pending (baseline roles/permissions,
-Super Admin bootstrap, sample countries/cities/categories/members).
+Seed data is clearly demo/sample data (see `prisma/seed.ts`) and must never be run
+against a production database. It seeds: permission rows, an optional Super Admin
+(from `SEED_SUPER_ADMIN_EMAIL`/`SEED_SUPER_ADMIN_PASSWORD`), 8 countries with cities,
+professional/business/story categories, 6 demo members (password `Demo1234!`, clearly
+`@demo.subzwari.example` addresses), and one demo business/story/event/family branch.
 
 ### Admin setup
 
-Once the seed script is implemented, the first Super Admin account is created from
-`SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` in `.env`. All further staff
+Set `SEED_SUPER_ADMIN_EMAIL` and `SEED_SUPER_ADMIN_PASSWORD` in `.env` before running
+`npm run db:seed` to bootstrap the first Super Admin account. All further staff
 accounts and role/permission assignments are managed from `/admin/admins` and
 `/admin/roles-permissions` — no code changes required.
 
@@ -114,8 +157,11 @@ reverse proxy, or a platform like Render/Fly/Vercel). At minimum:
    `prisma migrate dev` in production) then `npm run start`.
 4. Point the app's custom domain at the deployment and enable TLS.
 
-## Production Checklist (tracked, not yet all applicable pre-MVP)
+## Production Checklist
 
+- [ ] `npm install && npx prisma validate && npm run typecheck && npm run build`
+      passes clean in a real environment (not yet run against this code — see
+      "Status" above)
 - [ ] All secrets set via platform environment config, none committed
 - [ ] `NEXTAUTH_SECRET` is a strong, unique value per environment
 - [ ] Database uses a least-privilege role and TLS connection
@@ -129,10 +175,11 @@ reverse proxy, or a platform like Render/Fly/Vercel). At minimum:
 
 ## Development Approach
 
-Development proceeds in the phased order defined in `ARCHITECTURE.md` §M — each phase
-ships fully working, backend-connected functionality before the next begins. No phase
-is marked complete while any part of it is faked, stubbed, or relies on hardcoded data
-that should come from the database/CMS.
+Development followed the phased order defined in `ARCHITECTURE.md` §M — each phase
+shipped fully working, backend-connected functionality before the next began. No
+phase was marked complete while any part of it was faked, stubbed, or relied on
+hardcoded data that should come from the database/CMS. See "Status" above for the
+one honest caveat: this hasn't been through a real `npm install`/build yet.
 
 ## Documentation
 

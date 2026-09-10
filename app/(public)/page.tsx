@@ -68,8 +68,18 @@ export default async function HomePage() {
   const { heroTitle, heroSubtitle, heroDescription, stats, countries, featuredMembers, categories, stories, moments } =
     await getHomepageData();
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "SUBZWARI Global Network",
+    alternateName: "SUBZWARI's ARE ONE",
+    description: heroDescription,
+    url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  };
+
   return (
     <div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {/* Hero */}
       <section className="mx-auto flex max-w-5xl flex-col items-center gap-6 px-6 py-24 text-center">
         <p className="text-sm font-medium uppercase tracking-widest text-accent">

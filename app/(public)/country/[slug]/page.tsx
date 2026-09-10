@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db/prisma";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const country = await prisma.country.findUnique({ where: { slug: params.slug } });
@@ -30,6 +31,7 @@ export default async function CountryDetailPage({ params }: { params: { slug: st
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-16">
+      <Breadcrumbs items={[{ label: "Countries", href: "/countries" }, { label: country.name }]} />
       <p className="text-sm uppercase tracking-wide text-accent">SUBZWARI IN</p>
       <h1 className="font-display text-4xl font-semibold">{country.name}</h1>
       {country.summary ? <p className="mt-3 max-w-2xl text-muted-foreground">{country.summary}</p> : null}
