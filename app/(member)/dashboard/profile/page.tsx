@@ -2,6 +2,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { getOwnProfile } from "@/lib/profile/get";
 import { prisma } from "@/lib/db/prisma";
 import { PersonalInfoForm } from "@/components/member/PersonalInfoForm";
+import { ProfilePhotoUpload } from "@/components/member/ProfilePhotoUpload";
 import { ProfileTabs } from "@/components/member/ProfileTabs";
 
 export default async function ProfilePersonalPage() {
@@ -18,6 +19,9 @@ export default async function ProfilePersonalPage() {
     <div>
       <h1 className="font-display text-2xl font-semibold">Your profile</h1>
       <ProfileTabs active="personal" />
+      <div className="mt-6">
+        <ProfilePhotoUpload currentUrl={profile.photoMedia?.url ?? null} />
+      </div>
       <div className="mt-6">
         <PersonalInfoForm
           countries={countries}
