@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { RsvpButtons } from "@/components/public/RsvpButtons";
+import { ReportButton } from "@/components/public/ReportButton";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const event = await prisma.event.findUnique({ where: { slug: params.slug } });
@@ -61,6 +62,12 @@ export default async function EventDetailPage({ params }: { params: { slug: stri
           </p>
         )}
       </div>
+
+      {session?.user ? (
+        <div className="mt-6">
+          <ReportButton targetType="EVENT" targetId={event.id} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db/prisma";
+import { getCurrentSession } from "@/lib/auth/session";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { ReportButton } from "@/components/public/ReportButton";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const business = await prisma.business.findUnique({ where: { slug: params.slug } });
@@ -11,6 +13,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function BusinessDetailPage({ params }: { params: { slug: string } }) {
+  const session = await getCurrentSession();
   const business = await prisma.business.findUnique({
     where: { slug: params.slug },
     include: { category: true, country: true, city: true, owner: true },
@@ -63,6 +66,12 @@ export default async function BusinessDetailPage({ params }: { params: { slug: s
           </div>
         </dl>
       </Card>
+
+      {session?.user ? (
+        <div className="mt-6">
+          <ReportButton targetType="BUSINESS" targetId={business.id} />
+        </div>
+      ) : null}
     </div>
   );
 }

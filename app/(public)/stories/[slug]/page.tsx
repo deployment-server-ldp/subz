@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db/prisma";
+import { getCurrentSession } from "@/lib/auth/session";
+import { ReportButton } from "@/components/public/ReportButton";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const story = await prisma.story.findUnique({ where: { slug: params.slug } });
@@ -9,6 +11,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function StoryDetailPage({ params }: { params: { slug: string } }) {
+  const session = await getCurrentSession();
   const now = new Date();
   const story = await prisma.story.findUnique({
     where: { slug: params.slug },
@@ -40,6 +43,12 @@ export default async function StoryDetailPage({ params }: { params: { slug: stri
               {t.tag.name}
             </span>
           ))}
+        </div>
+      ) : null}
+
+      {session?.user ? (
+        <div className="mt-8">
+          <ReportButton targetType="STORY" targetId={story.id} />
         </div>
       ) : null}
     </article>

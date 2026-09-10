@@ -1,6 +1,7 @@
 import { VerifiedBadge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ProfileActions } from "@/components/public/ProfileActions";
+import { ReportButton } from "@/components/public/ReportButton";
 
 type VisibleProfile = {
   id: string;
@@ -110,6 +111,12 @@ export function ProfileDetail({
           </a>{" "}
           to connect with this member.
         </p>
+      ) : null}
+
+      {signedIn && !isOwner ? (
+        <div className="mt-6">
+          <ReportButton targetType="PROFILE" targetId={profile.id} />
+        </div>
       ) : null}
     </div>
   );
