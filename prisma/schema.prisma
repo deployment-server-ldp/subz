@@ -1,0 +1,1009 @@
+// SUBZWARI GLOBAL NETWORK — Database Schema
+// See /DATABASE.md for the narrative ERD and design rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────
+
+enum SystemRole {
+  SUPER_ADMIN
+  ADMIN
+  VERIFICATION_MANAGER
+  CONTENT_MANAGER
+  REGIONAL_COORDINATOR
+  MODERATOR
+  MEMBER
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum VerificationStatus {
+  REGISTERED
+  PENDING
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  MORE_INFO_REQUESTED
+  SUSPENDED
+}
+
+enum VerificationDecision {
+  APPROVED
+  REJECTED
+  MORE_INFO_REQUESTED
+  SUSPENDED
+  RESTORED
+}
+
+enum Visibility {
+  PUBLIC
+  COMMUNITY
+  PRIVATE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum RelationshipType {
+  FATHER
+  MOTHER
+  SON
+  DAUGHTER
+  BROTHER
+  SISTER
+  SPOUSE
+  GRANDFATHER
+  GRANDMOTHER
+  UNCLE
+  AUNT
+  COUSIN
+}
+
+enum RelationshipStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
+enum BranchMembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum EventStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  COMPLETED
+  CANCELLED
+}
+
+enum RsvpStatus {
+  GOING
+  INTERESTED
+  CANCELLED
+}
+
+enum StoryType {
+  MEMBER
+  FAMILY
+  HERITAGE
+  HISTORY
+  ACHIEVEMENT
+  PROFESSIONAL_JOURNEY
+  COMMUNITY
+  GLOBAL
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  SCHEDULED
+  REJECTED
+  ARCHIVED
+}
+
+enum MomentType {
+  CELEBRATION
+  WEDDING
+  GRADUATION
+  BIRTHDAY
+  BUSINESS_ACHIEVEMENT
+  COMMUNITY_GATHERING
+  FAMILY_GATHERING
+  OTHER
+}
+
+enum SupportCategory {
+  CAREER_GUIDANCE
+  PROFESSIONAL_ADVICE
+  MENTORSHIP
+  RELOCATION_GUIDANCE
+  BUSINESS_INTRODUCTION
+  EDUCATION_GUIDANCE
+  GENERAL_ASSISTANCE
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ContactPreference {
+  PLATFORM_MESSAGE
+  EMAIL
+  EITHER
+}
+
+enum SupportRequestStatus {
+  PENDING_REVIEW
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  REMOVED
+}
+
+enum ReportTargetType {
+  PROFILE
+  BUSINESS
+  STORY
+  MOMENT
+  EVENT
+  SUPPORT_REQUEST
+}
+
+enum ReportReason {
+  FAKE_PROFILE
+  INCORRECT_INFORMATION
+  HARASSMENT
+  SPAM
+  INAPPROPRIATE_CONTENT
+  PRIVACY_CONCERN
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationType {
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  VERIFICATION_MORE_INFO
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  EVENT_RSVP_CONFIRMED
+  STORY_APPROVED
+  BUSINESS_APPROVED
+  SUPPORT_REQUEST_UPDATE
+  ADMIN_ANNOUNCEMENT
+}
+
+enum SettingCategory {
+  GENERAL
+  BRAND
+  EMAIL
+  REGISTRATION
+  VERIFICATION
+  PRIVACY
+  MODERATION
+  NOTIFICATIONS
+  SEO
+  COMMUNITY
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// IDENTITY & ACCESS
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String        @id @default(uuid())
+  email             String        @unique
+  emailVerifiedAt   DateTime?
+  passwordHash      String?
+  systemRole        SystemRole    @default(MEMBER)
+  accountStatus     AccountStatus @default(ACTIVE)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  profile             Profile?
+  sessions            Session[]
+  accounts            Account[]
+  otps                VerificationOtp[]
+  roles               UserRole[]
+  regionalAssignments RegionalAssignment[]
+
+  reviewedVerifications VerificationRequest[] @relation("AssignedReviewer")
+  verificationReviews   VerificationReview[]  @relation("ReviewedBy")
+  auditLogs             AuditLog[]             @relation("AuditActor")
+  reportsFiled          Report[]               @relation("ReportedBy")
+  reportsResolved       Report[]               @relation("ResolvedBy")
+  notifications         Notification[]
+  uploadedMedia         Media[]
+
+  @@index([systemRole])
+  @@index([accountStatus])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String
+  refreshToken      String?
+  accessToken       String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTER
+  RESET_PASSWORD
+}
+
+model VerificationOtp {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([userId, purpose])
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  name        String
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  name        String
+  description String?
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RegionalAssignment {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  regionId  String?
+  region    Region?  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([countryId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PROFILE & FAMILY
+// ─────────────────────────────────────────────────────────────────────────
+
+model Profile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal
+  firstName        String
+  middleName       String?
+  lastName         String
+  slug             String   @unique
+  photoMediaId     String?
+  photoMedia       Media?   @relation("ProfilePhoto", fields: [photoMediaId], references: [id])
+  gender           Gender?
+  dateOfBirth      DateTime?
+  countryId        String?
+  country          Country? @relation(fields: [countryId], references: [id])
+  cityId           String?
+  city             City?    @relation(fields: [cityId], references: [id])
+  currentResidence String?
+  nationality      String?
+  bio              String?
+
+  // Family (non-sensitive free text; confirmed relationships live in FamilyRelationship)
+  fathersName          String?
+  grandfathersName     String?
+  greatGrandfathersName String?
+  ancestralRegion      String?
+  familyInformation    String?
+
+  // Professional
+  profession   String?
+  jobTitle     String?
+  company      String?
+  industry     String?
+  skills       String[] @default([])
+  education    String?
+  university   String?
+  linkedinUrl  String?
+  websiteUrl   String?
+
+  // Community preferences
+  openToNetworking      Boolean @default(false)
+  openToMentorship      Boolean @default(false)
+  openToBusinessNetwork Boolean @default(false)
+  openToEvents          Boolean @default(true)
+  openToHelping         Boolean @default(false)
+
+  // Privacy & verification
+  visibility          Visibility          @default(COMMUNITY)
+  verificationStatus  VerificationStatus  @default(REGISTERED)
+  isIndexable         Boolean             @default(false) // gated: only true when PUBLIC + VERIFIED
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  privateContact       PrivateContactInfo?
+  branchMemberships    FamilyBranchMembership[]
+  relationshipsFrom    FamilyRelationship[]      @relation("RelationshipFrom")
+  relationshipsTo      FamilyRelationship[]      @relation("RelationshipTo")
+  professionalCategories ProfileProfessionalCategory[]
+
+  ownedBusinesses      Business[]
+  organizedEvents      Event[]
+  eventAttendance      EventAttendee[]
+  authoredStories      Story[]
+  submittedMoments     Moment[]
+  supportRequests      SupportRequest[]
+  supportOffers        SupportOffer[]
+
+  connectionsSent      Connection[]     @relation("ConnectionRequester")
+  connectionsReceived  Connection[]     @relation("ConnectionRecipient")
+  contactRequestsSent  ContactRequest[] @relation("ContactFrom")
+  contactRequestsRecvd ContactRequest[] @relation("ContactTo")
+
+  verificationRequests VerificationRequest[]
+
+  @@index([countryId, cityId, visibility, verificationStatus])
+  @@index([verificationStatus])
+}
+
+// Sensitive contact fields kept off the Profile model entirely so no public/community
+// query path can accidentally select them (see DATABASE.md "Privacy Enforcement").
+model PrivateContactInfo {
+  id            String  @id @default(uuid())
+  profileId     String  @unique
+  profile       Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  phoneNumber   String?
+  homeAddress   String?
+  govIdRef      String? // optional, only used if admin enables document-based verification
+  updatedAt     DateTime @updatedAt
+}
+
+model FamilyBranch {
+  id                  String   @id @default(uuid())
+  name                String
+  slug                String   @unique
+  description         String?
+  region              String?
+  historicalInformation String?
+  coverMediaId        String?
+  coverMedia          Media?   @relation(fields: [coverMediaId], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  memberships FamilyBranchMembership[]
+}
+
+model FamilyBranchMembership {
+  id        String                  @id @default(uuid())
+  profileId String
+  profile   Profile                 @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    FamilyBranch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  status    BranchMembershipStatus  @default(PENDING)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  @@unique([profileId, branchId])
+}
+
+model FamilyRelationship {
+  id               String              @id @default(uuid())
+  fromProfileId    String
+  fromProfile      Profile             @relation("RelationshipFrom", fields: [fromProfileId], references: [id], onDelete: Cascade)
+  toProfileId      String
+  toProfile        Profile             @relation("RelationshipTo", fields: [toProfileId], references: [id], onDelete: Cascade)
+  relationshipType RelationshipType
+  visibility       Visibility          @default(PRIVATE)
+  status           RelationshipStatus  @default(PENDING)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([fromProfileId, toProfileId, relationshipType])
+  @@index([toProfileId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GEOGRAPHY
+// ─────────────────────────────────────────────────────────────────────────
+
+model Country {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  isoCode      String?  @unique
+  flagMediaId  String?
+  flagMedia    Media?   @relation("CountryFlag", fields: [flagMediaId], references: [id])
+  coverMediaId String?
+  coverMedia   Media?   @relation("CountryCover", fields: [coverMediaId], references: [id])
+  summary      String?
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  regions             Region[]
+  cities              City[]
+  profiles            Profile[]
+  businesses          Business[]
+  events              Event[]
+  regionalAssignments RegionalAssignment[]
+  seoMetadata         SeoMetadata?
+}
+
+model Region {
+  id        String   @id @default(uuid())
+  name      String
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  cities              City[]
+  regionalAssignments RegionalAssignment[]
+
+  @@unique([countryId, name])
+}
+
+model City {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  regionId  String?
+  region    Region?  @relation(fields: [regionId], references: [id])
+  createdAt DateTime @default(now())
+
+  profiles    Profile[]
+  businesses  Business[]
+  events      Event[]
+  seoMetadata SeoMetadata?
+
+  @@unique([countryId, slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PROFESSIONAL & BUSINESS
+// ─────────────────────────────────────────────────────────────────────────
+
+model ProfessionalCategory {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  displayOrder Int     @default(0)
+
+  profiles ProfileProfessionalCategory[]
+}
+
+model ProfileProfessionalCategory {
+  profileId  String
+  categoryId String
+  profile    Profile              @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  category   ProfessionalCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, categoryId])
+}
+
+model BusinessCategory {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  displayOrder Int     @default(0)
+
+  businesses Business[]
+}
+
+model Business {
+  id              String            @id @default(uuid())
+  name            String
+  slug            String            @unique
+  ownerId         String
+  owner           Profile           @relation(fields: [ownerId], references: [id])
+  categoryId      String
+  category        BusinessCategory  @relation(fields: [categoryId], references: [id])
+  countryId       String
+  country         Country           @relation(fields: [countryId], references: [id])
+  cityId          String?
+  city            City?             @relation(fields: [cityId], references: [id])
+  website         String?
+  description     String
+  logoMediaId     String?
+  logoMedia       Media?            @relation("BusinessLogo", fields: [logoMediaId], references: [id])
+  contactMethod   String?
+  socialLinks     Json?
+  status          ModerationStatus  @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  media       Media[]      @relation("BusinessMedia")
+  seoMetadata SeoMetadata?
+
+  @@index([status, countryId, cityId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMMUNITY CONTENT: EVENTS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Event {
+  id             String      @id @default(uuid())
+  name           String
+  slug           String      @unique
+  description    String
+  startsAt       DateTime
+  endsAt         DateTime?
+  location       String?
+  countryId      String?
+  country        Country?    @relation(fields: [countryId], references: [id])
+  cityId         String?
+  city           City?       @relation(fields: [cityId], references: [id])
+  organizerId    String
+  organizer      Profile     @relation(fields: [organizerId], references: [id])
+  coverMediaId   String?
+  coverMedia     Media?      @relation("EventCover", fields: [coverMediaId], references: [id])
+  requiresRsvp   Boolean     @default(true)
+  maxCapacity    Int?
+  status         EventStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  gallery Media[]         @relation("EventGallery")
+  rsvps   EventAttendee[]
+
+  @@index([status, countryId, cityId])
+}
+
+model EventAttendee {
+  id        String     @id @default(uuid())
+  eventId   String
+  event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  profileId String
+  profile   Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  status    RsvpStatus @default(GOING)
+  createdAt DateTime   @default(now())
+
+  @@unique([eventId, profileId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMMUNITY CONTENT: STORIES
+// ─────────────────────────────────────────────────────────────────────────
+
+model StoryCategory {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+
+  stories Story[]
+}
+
+model Story {
+  id             String        @id @default(uuid())
+  title          String
+  slug           String        @unique
+  excerpt        String?
+  body           String
+  type           StoryType
+  categoryId     String?
+  category       StoryCategory? @relation(fields: [categoryId], references: [id])
+  authorId       String?
+  author         Profile?      @relation(fields: [authorId], references: [id])
+  coverMediaId   String?
+  coverMedia     Media?        @relation("StoryCover", fields: [coverMediaId], references: [id])
+  status         ContentStatus @default(DRAFT)
+  featured       Boolean       @default(false)
+  publishedAt    DateTime?
+  scheduledAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  tags        StoryTag[]
+  seoMetadata SeoMetadata?
+
+  @@index([status, featured, publishedAt])
+}
+
+model Tag {
+  id   String @id @default(uuid())
+  name String @unique
+  slug String @unique
+
+  stories StoryTag[]
+}
+
+model StoryTag {
+  storyId String
+  tagId   String
+  story   Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  tag     Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([storyId, tagId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMMUNITY CONTENT: MOMENTS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Moment {
+  id              String            @id @default(uuid())
+  caption         String
+  type            MomentType
+  submittedById   String
+  submittedBy     Profile           @relation(fields: [submittedById], references: [id])
+  countryId       String?
+  cityId          String?
+  status          ModerationStatus  @default(PENDING)
+  featured        Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  media Media[] @relation("MomentMedia")
+
+  @@index([status, featured])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMMUNITY SUPPORT
+// ─────────────────────────────────────────────────────────────────────────
+
+model SupportRequest {
+  id                String                @id @default(uuid())
+  requesterId       String
+  requester         Profile               @relation(fields: [requesterId], references: [id])
+  category          SupportCategory
+  title             String
+  description       String
+  countryId         String?
+  cityId            String?
+  urgency           UrgencyLevel          @default(MEDIUM)
+  visibility        Visibility            @default(COMMUNITY)
+  contactPreference ContactPreference     @default(PLATFORM_MESSAGE)
+  status            SupportRequestStatus  @default(PENDING_REVIEW)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  deletedAt         DateTime?
+
+  offers SupportOffer[]
+
+  @@index([status, category])
+}
+
+model SupportOffer {
+  id                String          @id @default(uuid())
+  supportRequestId  String
+  supportRequest    SupportRequest  @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  helperId          String
+  helper            Profile         @relation(fields: [helperId], references: [id])
+  message           String
+  createdAt         DateTime        @default(now())
+
+  @@unique([supportRequestId, helperId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// NETWORKING
+// ─────────────────────────────────────────────────────────────────────────
+
+model Connection {
+  id            String            @id @default(uuid())
+  requesterId   String
+  requester     Profile           @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipientId   String
+  recipient     Profile           @relation("ConnectionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  status        ConnectionStatus  @default(PENDING)
+  createdAt     DateTime          @default(now())
+  respondedAt   DateTime?
+
+  @@unique([requesterId, recipientId])
+  @@index([recipientId, status])
+}
+
+model ContactRequest {
+  id         String   @id @default(uuid())
+  fromId     String
+  from       Profile  @relation("ContactFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId       String
+  to         Profile  @relation("ContactTo", fields: [toId], references: [id], onDelete: Cascade)
+  message    String
+  createdAt  DateTime @default(now())
+
+  @@index([toId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// VERIFICATION & MODERATION
+// ─────────────────────────────────────────────────────────────────────────
+
+model VerificationRequest {
+  id               String              @id @default(uuid())
+  profileId        String
+  profile          Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  submissionData   Json
+  status           VerificationStatus  @default(PENDING)
+  assignedToId     String?
+  assignedTo       User?               @relation("AssignedReviewer", fields: [assignedToId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  reviews VerificationReview[]
+
+  @@index([status])
+}
+
+model VerificationReview {
+  id                     String                @id @default(uuid())
+  verificationRequestId  String
+  verificationRequest    VerificationRequest   @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
+  reviewerId             String
+  reviewer               User                  @relation("ReviewedBy", fields: [reviewerId], references: [id])
+  decision               VerificationDecision
+  notes                  String?
+  createdAt              DateTime              @default(now())
+
+  @@index([verificationRequestId])
+}
+
+// Polymorphic by convention (targetType + targetId), not by a real Prisma
+// relation: a single foreign-key column cannot carry a referential-integrity
+// constraint to five different parent tables at once, and no single report
+// row is ever tied to more than one target type. `modules/reports` resolves
+// the target with a switch on `targetType`; referential integrity for the
+// existence of the target is enforced at the application layer, and target
+// rows are soft-deleted (never hard-deleted) so a report's `targetId` always
+// still resolves to a row.
+model Report {
+  id             String           @id @default(uuid())
+  reporterId     String
+  reporter       User             @relation("ReportedBy", fields: [reporterId], references: [id])
+  targetType     ReportTargetType
+  targetId       String
+  reason         ReportReason
+  details        String?
+  status         ReportStatus     @default(OPEN)
+  resolvedById   String?
+  resolvedBy     User?            @relation("ResolvedBy", fields: [resolvedById], references: [id])
+  resolutionNote String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String            @id @default(uuid())
+  recipientId String
+  recipient   User              @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  payload     Json?
+  link        String?
+  read        Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+
+  @@index([recipientId, read, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CMS & SETTINGS
+// ─────────────────────────────────────────────────────────────────────────
+
+model SiteSetting {
+  id       String          @id @default(uuid())
+  category SettingCategory
+  key      String
+  value    Json
+  updatedAt DateTime       @updatedAt
+
+  @@unique([category, key])
+}
+
+model Page {
+  id          String        @id @default(uuid())
+  title       String
+  slug        String        @unique
+  body        String
+  status      ContentStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  seoMetadata SeoMetadata?
+}
+
+model NavigationItem {
+  id           String   @id @default(uuid())
+  label        String
+  href         String
+  displayOrder Int      @default(0)
+  parentId     String?
+  parent       NavigationItem?  @relation("NavChildren", fields: [parentId], references: [id])
+  children     NavigationItem[] @relation("NavChildren")
+  isVisible    Boolean  @default(true)
+}
+
+model FooterItem {
+  id           String   @id @default(uuid())
+  section      String
+  label        String
+  href         String
+  displayOrder Int      @default(0)
+  isVisible    Boolean  @default(true)
+}
+
+model Media {
+  id           String   @id @default(uuid())
+  url          String
+  mimeType     String
+  sizeBytes    Int
+  altText      String?
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  // Gallery-style one-to-many owners: the FK lives here on Media so one
+  // business/event/moment can own many media rows (see note above Report
+  // about why these are real relations, unlike the Report polymorphism).
+  businessGalleryId String?
+  businessGallery   Business? @relation("BusinessMedia", fields: [businessGalleryId], references: [id], onDelete: Cascade)
+  eventGalleryId    String?
+  eventGallery      Event?    @relation("EventGallery", fields: [eventGalleryId], references: [id], onDelete: Cascade)
+  momentId          String?
+  moment            Moment?   @relation("MomentMedia", fields: [momentId], references: [id], onDelete: Cascade)
+
+  profilePhotos  Profile[]      @relation("ProfilePhoto")
+  countryFlags   Country[]      @relation("CountryFlag")
+  countryCovers  Country[]      @relation("CountryCover")
+  businessLogos  Business[]     @relation("BusinessLogo")
+  eventCovers    Event[]        @relation("EventCover")
+  storyCovers    Story[]        @relation("StoryCover")
+  familyBranches FamilyBranch[]
+
+  @@index([businessGalleryId])
+  @@index([eventGalleryId])
+  @@index([momentId])
+}
+
+model SeoMetadata {
+  id             String  @id @default(uuid())
+  title          String?
+  description    String?
+  ogImage        String?
+  canonicalUrl   String?
+
+  pageId     String?   @unique
+  page       Page?     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  storyId    String?   @unique
+  story      Story?    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  countryId  String?   @unique
+  country    Country?  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  cityId     String?   @unique
+  city       City?     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  businessId String?   @unique
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
