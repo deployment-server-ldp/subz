@@ -26,7 +26,7 @@ export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 export const ALL_PERMISSIONS: PermissionKey[] = Object.values(PERMISSIONS);
 
-const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
+export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   ADMIN: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.MANAGE_ADMINS_ROLES),
   VERIFICATION_MANAGER: [PERMISSIONS.REVIEW_VERIFICATION],

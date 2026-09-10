@@ -5,9 +5,17 @@ import { Card } from "@/components/ui/Card";
 import { VerifiedBadge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getSetting } from "@/lib/settings/get";
 
 async function getHomepageData() {
-  const [stats, countries, featuredMembers, categories, stories, moments] = await Promise.all([
+  const [heroTitle, heroSubtitle, heroDescription, stats, countries, featuredMembers, categories, stories, moments] = await Promise.all([
+    getSetting("GENERAL", "heroTitle", "SUBZWARI GLOBAL"),
+    getSetting("GENERAL", "heroSubtitle", "SUBZWARI's ARE ONE"),
+    getSetting(
+      "GENERAL",
+      "heroDescription",
+      "Connecting Subzwari families, professionals and communities across the world.",
+    ),
     Promise.all([
       prisma.profile.count({ where: { verificationStatus: "VERIFIED" } }),
       prisma.country.count({ where: { profiles: { some: { verificationStatus: "VERIFIED" } } } }),
@@ -44,6 +52,9 @@ async function getHomepageData() {
   const [verifiedMembers, countryCount, cityCount, professionals, businesses, events] = stats;
 
   return {
+    heroTitle,
+    heroSubtitle,
+    heroDescription,
     stats: { verifiedMembers, countryCount, cityCount, professionals, businesses, events },
     countries,
     featuredMembers,
@@ -54,7 +65,8 @@ async function getHomepageData() {
 }
 
 export default async function HomePage() {
-  const { stats, countries, featuredMembers, categories, stories, moments } = await getHomepageData();
+  const { heroTitle, heroSubtitle, heroDescription, stats, countries, featuredMembers, categories, stories, moments } =
+    await getHomepageData();
 
   return (
     <div>
@@ -63,11 +75,9 @@ export default async function HomePage() {
         <p className="text-sm font-medium uppercase tracking-widest text-accent">
           One Name. One Community. One Network.
         </p>
-        <h1 className="font-display text-5xl font-semibold sm:text-6xl">SUBZWARI GLOBAL</h1>
-        <h2 className="font-display text-2xl text-muted-foreground sm:text-3xl">SUBZWARI&rsquo;s ARE ONE</h2>
-        <p className="max-w-2xl text-lg text-muted-foreground">
-          Connecting Subzwari families, professionals and communities across the world.
-        </p>
+        <h1 className="font-display text-5xl font-semibold sm:text-6xl">{heroTitle}</h1>
+        <h2 className="font-display text-2xl text-muted-foreground sm:text-3xl">{heroSubtitle}</h2>
+        <p className="max-w-2xl text-lg text-muted-foreground">{heroDescription}</p>
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           <ButtonLink href="/register" size="lg">
             JOIN THE COMMUNITY

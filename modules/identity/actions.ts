@@ -1,7 +1,9 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { hashPassword } from "@/lib/auth/password";
+import { requireSession } from "@/lib/auth/session";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { issueOtp, verifyOtp } from "@/lib/auth/otp";
 import { sendEmail } from "@/lib/email";
 import { otpEmail, welcomeEmail } from "@/lib/email/templates";
@@ -142,5 +144,40 @@ export async function resetPassword(input: unknown): Promise<ActionResult> {
   const passwordHash = await hashPassword(password);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
+  return { success: true };
+}
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z
+    .string()
+    .min(10, "Password must be at least 10 characters")
+    .max(200)
+    .regex(/[A-Za-z]/, "Password must include a letter")
+    .regex(/[0-9]/, "Password must include a number"),
+});
+
+export async function changePassword(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = changePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user?.passwordHash) return { success: false, error: "Password login is not enabled for this account." };
+
+  const valid = await verifyPassword(user.passwordHash, parsed.data.currentPassword);
+  if (!valid) return { success: false, error: "Current password is incorrect." };
+
+  const passwordHash = await hashPassword(parsed.data.newPassword);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  return { success: true };
+}
+
+export async function deactivateAccount(): Promise<ActionResult> {
+  const session = await requireSession();
+  await prisma.user.update({ where: { id: session.user.id }, data: { accountStatus: "DEACTIVATED" } });
   return { success: true };
 }
