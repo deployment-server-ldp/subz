@@ -197,3 +197,34 @@ function query_string_with(array $overrides): string
     $params = array_merge($_GET, $overrides);
     return http_build_query($params);
 }
+
+/** Reads a published CMS page by slug, or null if not created yet (caller supplies a fallback). */
+function get_cms_page(string $slug): ?array
+{
+    $stmt = db()->prepare("SELECT * FROM pages WHERE slug = ? AND status = 'published' LIMIT 1");
+    $stmt->execute([$slug]);
+    return $stmt->fetch() ?: null;
+}
+
+function get_setting(string $category, string $key, string $default = ''): string
+{
+    $stmt = db()->prepare('SELECT setting_value FROM site_settings WHERE category = ? AND setting_key = ? LIMIT 1');
+    $stmt->execute([$category, $key]);
+    $value = $stmt->fetchColumn();
+    return $value !== false ? $value : $default;
+}
+
+/** Renders a full public page (header/body/footer) for a simple CMS-backed content page, with a fallback if the admin hasn't created it yet. */
+function render_simple_page(string $slug, string $defaultTitle, string $defaultBody): void
+{
+    $page = get_cms_page($slug);
+    $pageTitle = $page['title'] ?? $defaultTitle;
+    require __DIR__ . '/header.php';
+    ?>
+    <div class="container-narrow" style="padding:64px 24px;">
+      <h1 class="display"><?= e($page['title'] ?? $defaultTitle) ?></h1>
+      <div style="white-space:pre-wrap; margin-top:16px; color:var(--muted-foreground);"><?= e($page['body'] ?? $defaultBody) ?></div>
+    </div>
+    <?php
+    require __DIR__ . '/footer.php';
+}
