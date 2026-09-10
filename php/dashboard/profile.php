@@ -48,6 +48,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['family_information']) ?: null, $profile['id'],
             ]);
             flash('success', 'Saved.');
+        } elseif ($postedTab === 'relationship_request') {
+            $targetSlug = trim($_POST['member_slug'] ?? '');
+            $type = $_POST['relationship_type'] ?? '';
+            $stmt = db()->prepare('SELECT id FROM profiles WHERE slug=?');
+            $stmt->execute([$targetSlug]);
+            $target = $stmt->fetch();
+            if (!$target) {
+                flash('error', "We couldn't find a member with that profile link.");
+            } elseif ((int) $target['id'] === (int) $profile['id']) {
+                flash('error', "You can't add yourself as a relative.");
+            } else {
+                $exists = db()->prepare('SELECT id FROM family_relationships WHERE from_profile_id=? AND to_profile_id=? AND relationship_type=?');
+                $exists->execute([$profile['id'], $target['id'], $type]);
+                if ($exists->fetch()) {
+                    flash('error', "You've already sent this request.");
+                } else {
+                    db()->prepare('INSERT INTO family_relationships (from_profile_id, to_profile_id, relationship_type, visibility, status, created_at) VALUES (?, ?, ?, "private", "pending", NOW())')
+                        ->execute([$profile['id'], $target['id'], $type]);
+                    flash('success', 'Relationship request sent.');
+                }
+            }
+        } elseif ($postedTab === 'relationship_respond') {
+            $relId = (int) $_POST['relationship_id'];
+            $accept = $_POST['accept'] === '1';
+            db()->prepare('UPDATE family_relationships SET status=? WHERE id=? AND to_profile_id=?')
+                ->execute([$accept ? 'confirmed' : 'declined', $relId, $profile['id']]);
+            flash('success', 'Updated.');
         } elseif ($postedTab === 'privacy') {
             $visibility = in_array($_POST['visibility'] ?? '', ['public', 'community', 'private'], true) ? $_POST['visibility'] : 'community';
             $isIndexable = ($visibility === 'public' && $profile['verification_status'] === 'verified') ? 1 : 0;
@@ -78,6 +105,17 @@ $categories = db()->query('SELECT * FROM professional_categories ORDER BY displa
 $stmt = db()->prepare('SELECT category_id FROM profile_professional_categories WHERE profile_id=?');
 $stmt->execute([$profile['id']]);
 $myCategoryIds = array_column($stmt->fetchAll(), 'category_id');
+
+$stmt = db()->prepare(
+    "SELECT r.*, fp.first_name AS from_first, fp.last_name AS from_last, tp.first_name AS to_first, tp.last_name AS to_last
+     FROM family_relationships r
+     INNER JOIN profiles fp ON fp.id = r.from_profile_id INNER JOIN profiles tp ON tp.id = r.to_profile_id
+     WHERE r.from_profile_id = ? OR r.to_profile_id = ? ORDER BY r.created_at DESC"
+);
+$stmt->execute([$profile['id'], $profile['id']]);
+$relationships = $stmt->fetchAll();
+$incomingPending = array_filter($relationships, fn($r) => (int) $r['to_profile_id'] === (int) $profile['id'] && $r['status'] === 'pending');
+$otherRelationships = array_filter($relationships, fn($r) => !((int) $r['to_profile_id'] === (int) $profile['id'] && $r['status'] === 'pending'));
 ?>
 <h1 class="display">Your profile</h1>
 <div class="tabs">
@@ -197,6 +235,51 @@ $myCategoryIds = array_column($stmt->fetchAll(), 'category_id');
     <div class="field"><label>Family information</label><textarea name="family_information" rows="4"><?= e($profile['family_information'] ?? '') ?></textarea></div>
     <button type="submit" class="btn btn-primary">Save changes</button>
   </form>
+
+  <div class="card" style="max-width:640px;">
+    <h3>Family Relationships</h3>
+    <form method="post" class="field-row" style="align-items:flex-end;">
+      <?= csrf_field() ?>
+      <input type="hidden" name="tab" value="relationship_request">
+      <div class="field"><label>Member's profile link (slug)</label><input type="text" name="member_slug" placeholder="e.g. ahmed-subzwari-a1b2c3"></div>
+      <div class="field">
+        <label>Relationship</label>
+        <select name="relationship_type">
+          <?php foreach (['father', 'mother', 'son', 'daughter', 'brother', 'sister', 'spouse', 'grandfather', 'grandmother', 'uncle', 'aunt', 'cousin'] as $rt): ?>
+            <option value="<?= $rt ?>"><?= ucfirst($rt) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="field"><button type="submit" class="btn btn-primary btn-sm">Send request</button></div>
+    </form>
+
+    <?php if (!empty($incomingPending)): ?>
+      <p style="font-weight:600; margin-top:16px;">Pending requests for you to confirm</p>
+      <?php foreach ($incomingPending as $r): ?>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
+          <span><?= e($r['from_first'] . ' ' . $r['from_last']) ?> says you are their <?= e($r['relationship_type']) ?></span>
+          <form method="post" style="display:flex; gap:4px;">
+            <?= csrf_field() ?>
+            <input type="hidden" name="tab" value="relationship_respond">
+            <input type="hidden" name="relationship_id" value="<?= $r['id'] ?>">
+            <button type="submit" name="accept" value="1" class="btn btn-primary btn-sm">Confirm</button>
+            <button type="submit" name="accept" value="0" class="btn btn-secondary btn-sm">Decline</button>
+          </form>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+
+    <?php if (!empty($otherRelationships)): ?>
+      <p style="font-weight:600; margin-top:16px;">Your relationships</p>
+      <?php foreach ($otherRelationships as $r):
+        $isFrom = (int) $r['from_profile_id'] === (int) $profile['id'];
+        $otherName = $isFrom ? $r['to_first'] . ' ' . $r['to_last'] : $r['from_first'] . ' ' . $r['from_last'];
+      ?>
+        <p class="text-muted"><?= e($otherName) ?> — <?= e($r['relationship_type']) ?> (<?= e($r['status']) ?>)</p>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+
   <p class="text-muted">Want to associate with a family branch? <a href="<?= BASE_URL ?>/family.php">Explore Family Branches</a></p>
 
 <?php elseif ($tab === 'privacy'): ?>
