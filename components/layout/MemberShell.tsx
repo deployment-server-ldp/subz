@@ -15,7 +15,13 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function MemberShell({ children }: { children: React.ReactNode }) {
+export function MemberShell({
+  children,
+  unreadNotifications = 0,
+}: {
+  children: React.ReactNode;
+  unreadNotifications?: number;
+}) {
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl">
       <aside className="hidden w-56 shrink-0 border-r border-border p-6 md:block">
@@ -24,8 +30,13 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav className="mt-8 flex flex-col gap-1 text-sm">
           {NAV.map((item) => (
-            <Link key={item.href} href={item.href} className="rounded px-3 py-2 hover:bg-muted">
+            <Link key={item.href} href={item.href} className="flex items-center justify-between rounded px-3 py-2 hover:bg-muted">
               {item.label}
+              {item.href === "/notifications" && unreadNotifications > 0 ? (
+                <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                  {unreadNotifications}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>
